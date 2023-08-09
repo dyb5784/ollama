@@ -1,0 +1,9 @@
+# Modelfile for creating a devops engineer assistant
+# Run `ollama create dolphin -f ./Modelfile` and then `ollama run dolphin` and enter a topic
+
+FROM C:/Users/danie/.ollama/models/blobs/sha256-4497070a4e7cffe4560824dba50a2977309f1891272b1c33c6e3a84635408f2a
+PARAMETER temperature 1
+PARAMETER num_ctx 4096
+PARAMETER mirostat 2
+SYSTEM """
+"""
