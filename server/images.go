@@ -11,7 +11,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,6 +28,7 @@ type RegistryOptions struct {
 	Insecure bool
 	Username string
 	Password string
+	Token    string
 }
 
 type Model struct {
@@ -480,31 +480,10 @@ func embeddingLayers(e EmbeddingParams) ([]*LayerReader, error) {
 						Total:     len(data) - 1,
 						Completed: i,
 					})
-					retry := 0
-				generate:
-					if retry > 3 {
-						log.Printf("failed to generate embedding for '%s' line %d: %v", filePath, i+1, err)
-						continue
-					}
 					embed, err := llm.Embedding(d)
 					if err != nil {
-						log.Printf("retrying embedding generation for '%s' line %d: %v", filePath, i+1, err)
-						retry++
-						goto generate
-					}
-					// Check for NaN and Inf in the embedding, which can't be stored
-					for _, value := range embed {
-						if math.IsNaN(value) || math.IsInf(value, 0) {
-							log.Printf("reloading model, embedding contains NaN or Inf")
-							// reload the model to get a new embedding, the seed can effect these outputs and reloading changes it
-							llm.Close()
-							llm, err = llama.New(e.model, e.opts)
-							if err != nil {
-								return nil, fmt.Errorf("load model to generate embeddings: %v", err)
-							}
-							retry++
-							goto generate
-						}
+						log.Printf("failed to generate embedding for '%s' line %d: %v", filePath, i+1, err)
+						continue
 					}
 					embeddings = append(embeddings, vector.Embedding{Data: d, Vector: embed})
 				}
@@ -1151,18 +1130,30 @@ func makeRequest(method, url string, headers map[string]string, body io.Reader, 
 		}
 	}
 
-	req, err := http.NewRequest(method, url, body)
+	// make a copy of the body in case we need to try the call to makeRequest again
+	var buf bytes.Buffer
+	if body != nil {
+		_, err := io.Copy(&buf, body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	bodyCopy := bytes.NewReader(buf.Bytes())
+
+	req, err := http.NewRequest(method, url, bodyCopy)
 	if err != nil {
 		return nil, err
 	}
 
-	for k, v := range headers {
-		req.Header.Set(k, v)
+	if regOpts.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+regOpts.Token)
+	} else if regOpts.Username != "" && regOpts.Password != "" {
+		req.SetBasicAuth(regOpts.Username, regOpts.Password)
 	}
 
-	// TODO: better auth
-	if regOpts.Username != "" && regOpts.Password != "" {
-		req.SetBasicAuth(regOpts.Username, regOpts.Password)
+	for k, v := range headers {
+		req.Header.Set(k, v)
 	}
 
 	client := &http.Client{
@@ -1179,7 +1170,53 @@ func makeRequest(method, url string, headers map[string]string, body io.Reader, 
 		return nil, err
 	}
 
+	// if the request is unauthenticated, try to authenticate and make the request again
+	if resp.StatusCode == http.StatusUnauthorized {
+		auth := resp.Header.Get("Www-Authenticate")
+		authRedir := ParseAuthRedirectString(string(auth))
+		token, err := getAuthToken(authRedir, regOpts)
+		if err != nil {
+			return nil, err
+		}
+		regOpts.Token = token
+		bodyCopy = bytes.NewReader(buf.Bytes())
+		return makeRequest(method, url, headers, bodyCopy, regOpts)
+	}
+
 	return resp, nil
+}
+
+func getValue(header, key string) string {
+	startIdx := strings.Index(header, key+"=")
+	if startIdx == -1 {
+		return ""
+	}
+
+	// Move the index to the starting quote after the key.
+	startIdx += len(key) + 2
+	endIdx := startIdx
+
+	for endIdx < len(header) {
+		if header[endIdx] == '"' {
+			if endIdx+1 < len(header) && header[endIdx+1] != ',' { // If the next character isn't a comma, continue
+				endIdx++
+				continue
+			}
+			break
+		}
+		endIdx++
+	}
+	return header[startIdx:endIdx]
+}
+
+func ParseAuthRedirectString(authStr string) AuthRedirect {
+	authStr = strings.TrimPrefix(authStr, "Bearer ")
+
+	return AuthRedirect{
+		Realm:   getValue(authStr, "realm"),
+		Service: getValue(authStr, "service"),
+		Scope:   getValue(authStr, "scope"),
+	}
 }
 
 var errDigestMismatch = fmt.Errorf("digest mismatch, file must be downloaded again")
