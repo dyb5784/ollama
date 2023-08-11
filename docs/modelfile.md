@@ -35,6 +35,7 @@ INSTRUCTION arguments
 | [`PARAMETER`](#parameter)           | Sets the parameters for how Ollama will run the model.        |
 | [`TEMPLATE`](#template)             | The full prompt template to be sent to the model.             |
 | [`SYSTEM`](#system)                 | Specifies the system prompt that will be set in the template. |
+| [`ADAPTER`](#adapter)               | Defines the (Q)LoRA adapters to apply to the model.           |
 | [`LICENSE`](#license)               | Specifies the legal license.                                  |
 
 ## Examples
@@ -104,6 +105,7 @@ PARAMETER <parameter> <parametervalue>
 | mirostat_eta   | Influences how quickly the algorithm responds to feedback from the generated text. A lower learning rate will result in slower adjustments, while a higher learning rate will make the algorithm more responsive. (Default: 0.1)                        | float      | mirostat_eta 0.1     |
 | mirostat_tau   | Controls the balance between coherence and diversity of the output. A lower value will result in more focused and coherent text. (Default: 5.0)                                                                                                         | float      | mirostat_tau 5.0     |
 | num_ctx        | Sets the size of the context window used to generate the next token. (Default: 2048)                                                                                                                                                                    | int        | num_ctx 4096         |
+| num_gqa        | The number of GQA groups in the transformer layer. Required for some models, for example it is 8 for llama2:70b                                                                                                                                         | int        | num_gqa 1            |
 | num_gpu        | The number of GPUs to use. On macOS it defaults to 1 to enable metal support, 0 to disable.                                                                                                                                                             | int        | num_gpu 1            |
 | num_thread     | Sets the number of threads to use during computation. By default, Ollama will detect this for optimal performance. It is recommended to set this value to the number of physical CPU cores your system has (as opposed to the logical number of cores). | int        | num_thread 8         |
 | repeat_last_n  | Sets how far back for the model to look back to prevent repetition. (Default: 64, 0 = disabled, -1 = num_ctx)                                                                                                                                           | int        | repeat_last_n 64     |
@@ -148,6 +150,14 @@ The `SYSTEM` instruction specifies the system prompt to be used in the template,
 
 ```
 SYSTEM """<system message>"""
+```
+
+### ADAPTER
+
+The `ADAPTER` instruction specifies the LoRA adapter to apply to the base model. The value of this instruction should be an absolute path or a path relative to the Modelfile and the file must be in a GGML file format. The adapter should be tuned from the base model otherwise the behaviour is undefined.
+
+```
+ADAPTER ./ollama-lora.bin
 ```
 
 ### LICENSE
