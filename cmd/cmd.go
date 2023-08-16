@@ -39,7 +39,10 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	var spinner *Spinner
 
@@ -75,6 +78,7 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 			spinner = NewSpinner(resp.Status)
 			go spinner.Spin(100 * time.Millisecond)
 		}
+
 		return nil
 	}
 
@@ -84,6 +88,9 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 
 	if spinner != nil {
 		spinner.Stop()
+		if spinner.description != "success" {
+			return errors.New("unexpected end to create model")
+		}
 	}
 
 	return nil
@@ -117,7 +124,10 @@ func RunHandler(cmd *cobra.Command, args []string) error {
 }
 
 func PushHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	insecure, err := cmd.Flags().GetBool("insecure")
 	if err != nil {
@@ -149,11 +159,19 @@ func PushHandler(cmd *cobra.Command, args []string) error {
 	if err := client.Push(context.Background(), &request, fn); err != nil {
 		return err
 	}
+
+	if bar != nil && !bar.IsFinished() {
+		return errors.New("unexpected end to push model")
+	}
+
 	return nil
 }
 
 func ListHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	models, err := client.List(context.Background())
 	if err != nil {
@@ -183,7 +201,10 @@ func ListHandler(cmd *cobra.Command, args []string) error {
 }
 
 func DeleteHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	req := api.DeleteRequest{Name: args[0]}
 	if err := client.Delete(context.Background(), &req); err != nil {
@@ -194,7 +215,10 @@ func DeleteHandler(cmd *cobra.Command, args []string) error {
 }
 
 func CopyHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	req := api.CopyRequest{Source: args[0], Destination: args[1]}
 	if err := client.Copy(context.Background(), &req); err != nil {
@@ -214,7 +238,10 @@ func PullHandler(cmd *cobra.Command, args []string) error {
 }
 
 func pull(model string, insecure bool) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	var currentDigest string
 	var bar *progressbar.ProgressBar
@@ -235,12 +262,18 @@ func pull(model string, insecure bool) error {
 			currentDigest = ""
 			fmt.Println(resp.Status)
 		}
+
 		return nil
 	}
 
 	if err := client.Pull(context.Background(), &request, fn); err != nil {
 		return err
 	}
+
+	if bar != nil && !bar.IsFinished() {
+		return errors.New("unexpected end to pull model")
+	}
+
 	return nil
 }
 
@@ -261,7 +294,10 @@ type generateContextKey string
 
 func generate(cmd *cobra.Command, model, prompt string) error {
 	if len(strings.TrimSpace(prompt)) > 0 {
-		client := api.NewClient()
+		client, err := api.FromEnv()
+		if err != nil {
+			return err
+		}
 
 		spinner := NewSpinner("")
 		go spinner.Spin(60 * time.Millisecond)
@@ -303,6 +339,10 @@ func generate(cmd *cobra.Command, model, prompt string) error {
 
 		fmt.Println()
 		fmt.Println()
+
+		if !latest.Done {
+			return errors.New("unexpected end of response")
+		}
 
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
@@ -644,7 +684,10 @@ func startMacApp(client *api.Client) error {
 }
 
 func checkServerHeartbeat(_ *cobra.Command, _ []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 	if err := client.Heartbeat(context.Background()); err != nil {
 		if !strings.Contains(err.Error(), "connection refused") {
 			return err
@@ -664,9 +707,10 @@ func NewCLI() *cobra.Command {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	rootCmd := &cobra.Command{
-		Use:          "ollama",
-		Short:        "Large language model runner",
-		SilenceUsage: true,
+		Use:           "ollama",
+		Short:         "Large language model runner",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{
 			DisableDefaultCmd: true,
 		},
