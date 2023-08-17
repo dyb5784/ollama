@@ -29,7 +29,9 @@ ollama run llama2
 
 ## Model library
 
-`ollama` includes a library of open-source models:
+Ollama supports a list of open-source models available on [ollama.ai/library](https://ollama.ai/library "ollama model library") 
+
+Here are some example open-source models that can be downloaded: 
 
 | Model                    | Parameters | Size  | Download                        |
 | ------------------------ | ---------- | ----- | ------------------------------- |
@@ -39,7 +41,8 @@ ollama run llama2
 | Llama2 Uncensored        | 7B         | 3.8GB | `ollama pull llama2-uncensored` |
 | Orca Mini                | 3B         | 1.9GB | `ollama pull orca-mini`         |
 | Vicuna                   | 7B         | 3.8GB | `ollama pull vicuna`            |
-| Nous-Hermes              | 13B        | 7.3GB | `ollama pull nous-hermes`       |
+| Nous-Hermes              | 7B         | 3.8GB | `ollama pull nous-hermes`       |
+| Nous-Hermes 13B          | 13B        | 7.3GB | `ollama pull nous-hermes:13b`   |
 | Wizard Vicuna Uncensored | 13B        | 7.3GB | `ollama pull wizard-vicuna`     |
 
 > Note: You should have at least 8 GB of RAM to run the 3B models, 16 GB to run the 7B models, and 32 GB to run the 13B models.
