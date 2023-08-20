@@ -3,6 +3,9 @@ package cmd
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,6 +24,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/jmorganca/ollama/api"
 	"github.com/jmorganca/ollama/format"
@@ -34,7 +39,10 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	var spinner *Spinner
 
@@ -70,6 +78,7 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 			spinner = NewSpinner(resp.Status)
 			go spinner.Spin(100 * time.Millisecond)
 		}
+
 		return nil
 	}
 
@@ -79,6 +88,9 @@ func CreateHandler(cmd *cobra.Command, args []string) error {
 
 	if spinner != nil {
 		spinner.Stop()
+		if spinner.description != "success" {
+			return errors.New("unexpected end to create model")
+		}
 	}
 
 	return nil
@@ -112,7 +124,10 @@ func RunHandler(cmd *cobra.Command, args []string) error {
 }
 
 func PushHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	insecure, err := cmd.Flags().GetBool("insecure")
 	if err != nil {
@@ -144,11 +159,19 @@ func PushHandler(cmd *cobra.Command, args []string) error {
 	if err := client.Push(context.Background(), &request, fn); err != nil {
 		return err
 	}
+
+	if bar != nil && !bar.IsFinished() {
+		return errors.New("unexpected end to push model")
+	}
+
 	return nil
 }
 
 func ListHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	models, err := client.List(context.Background())
 	if err != nil {
@@ -178,7 +201,10 @@ func ListHandler(cmd *cobra.Command, args []string) error {
 }
 
 func DeleteHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	req := api.DeleteRequest{Name: args[0]}
 	if err := client.Delete(context.Background(), &req); err != nil {
@@ -189,7 +215,10 @@ func DeleteHandler(cmd *cobra.Command, args []string) error {
 }
 
 func CopyHandler(cmd *cobra.Command, args []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	req := api.CopyRequest{Source: args[0], Destination: args[1]}
 	if err := client.Copy(context.Background(), &req); err != nil {
@@ -209,7 +238,10 @@ func PullHandler(cmd *cobra.Command, args []string) error {
 }
 
 func pull(model string, insecure bool) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 
 	var currentDigest string
 	var bar *progressbar.ProgressBar
@@ -230,12 +262,18 @@ func pull(model string, insecure bool) error {
 			currentDigest = ""
 			fmt.Println(resp.Status)
 		}
+
 		return nil
 	}
 
 	if err := client.Pull(context.Background(), &request, fn); err != nil {
 		return err
 	}
+
+	if bar != nil && !bar.IsFinished() {
+		return errors.New("unexpected end to pull model")
+	}
+
 	return nil
 }
 
@@ -256,7 +294,10 @@ type generateContextKey string
 
 func generate(cmd *cobra.Command, model, prompt string) error {
 	if len(strings.TrimSpace(prompt)) > 0 {
-		client := api.NewClient()
+		client, err := api.FromEnv()
+		if err != nil {
+			return err
+		}
 
 		spinner := NewSpinner("")
 		go spinner.Spin(60 * time.Millisecond)
@@ -299,6 +340,10 @@ func generate(cmd *cobra.Command, model, prompt string) error {
 		fmt.Println()
 		fmt.Println()
 
+		if !latest.Done {
+			return errors.New("unexpected end of response")
+		}
+
 		verbose, err := cmd.Flags().GetBool("verbose")
 		if err != nil {
 			return err
@@ -318,12 +363,16 @@ func generate(cmd *cobra.Command, model, prompt string) error {
 
 func showLayer(l *server.Layer) {
 	filename, err := server.GetBlobsPath(l.Digest)
-	bts, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("Couldn't read layer")
+		fmt.Println("Couldn't get layer's path")
 		return
 	}
-	fmt.Printf(string(bts) + "\n")
+	bts, err := os.ReadFile(filename)
+	if err != nil {
+		fmt.Println("Couldn't read layer")
+		return
+	}
+	fmt.Println(string(bts))
 }
 
 func generateInteractive(cmd *cobra.Command, model string) error {
@@ -460,7 +509,7 @@ func generateInteractive(cmd *cobra.Command, model string) error {
 				mp := server.ParseModelPath(model)
 				manifest, err := server.GetManifest(mp)
 				if err != nil {
-					fmt.Printf("error: couldn't get a manifestfor this model")
+					fmt.Println("error: couldn't get a manifest for this model")
 					continue
 				}
 				switch args[1] {
@@ -519,34 +568,24 @@ func generateBatch(cmd *cobra.Command, model string) error {
 	return nil
 }
 
-// getRunServerParams takes a command and the environment variables and returns the correct params
-// given the order of precedence: command line args (highest), environment variables, defaults (lowest)
-func getRunServerParams(cmd *cobra.Command) (host, port string, extraOrigins []string, err error) {
-	host = os.Getenv("OLLAMA_HOST")
-	hostFlag := cmd.Flags().Lookup("host")
-	if hostFlag == nil {
-		return "", "", nil, errors.New("host unset")
-	}
-	if hostFlag.Changed || host == "" {
-		host = hostFlag.Value.String()
-	}
-	port = os.Getenv("OLLAMA_PORT")
-	portFlag := cmd.Flags().Lookup("port")
-	if portFlag == nil {
-		return "", "", nil, errors.New("port unset")
-	}
-	if portFlag.Changed || port == "" {
-		port = portFlag.Value.String()
-	}
-	extraOrigins, err = cmd.Flags().GetStringSlice("allowed-origins")
-	if err != nil {
-		return "", "", nil, err
-	}
-	return host, port, extraOrigins, nil
-}
-
 func RunServer(cmd *cobra.Command, _ []string) error {
-	host, port, extraOrigins, err := getRunServerParams(cmd)
+	var host, port = "127.0.0.1", "11434"
+
+	parts := strings.Split(os.Getenv("OLLAMA_HOST"), ":")
+	if ip := net.ParseIP(parts[0]); ip != nil {
+		host = ip.String()
+	}
+
+	if len(parts) > 1 {
+		port = parts[1]
+	}
+
+	// deprecated: include port in OLLAMA_HOST
+	if p := os.Getenv("OLLAMA_PORT"); p != "" {
+		port = p
+	}
+
+	err := initializeKeypair()
 	if err != nil {
 		return err
 	}
@@ -556,7 +595,61 @@ func RunServer(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return server.Serve(ln, extraOrigins)
+	var origins []string
+	if o := os.Getenv("OLLAMA_ORIGINS"); o != "" {
+		origins = strings.Split(o, ",")
+	}
+
+	return server.Serve(ln, origins)
+}
+
+func initializeKeypair() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	privKeyPath := filepath.Join(home, ".ollama", "id_ed25519")
+	pubKeyPath := filepath.Join(home, ".ollama", "id_ed25519.pub")
+
+	_, err = os.Stat(privKeyPath)
+	if os.IsNotExist(err) {
+		fmt.Printf("Couldn't find '%s'. Generating new private key.\n", privKeyPath)
+		_, privKey, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			return err
+		}
+
+		privKeyBytes, err := format.OpenSSHPrivateKey(privKey, "")
+		if err != nil {
+			return err
+		}
+
+		err = os.MkdirAll(path.Dir(privKeyPath), 0o700)
+		if err != nil {
+			return fmt.Errorf("could not create directory %w", err)
+		}
+
+		err = os.WriteFile(privKeyPath, pem.EncodeToMemory(privKeyBytes), 0600)
+		if err != nil {
+			return err
+		}
+
+		sshPrivateKey, err := ssh.NewSignerFromKey(privKey)
+		if err != nil {
+			return err
+		}
+
+		pubKeyData := ssh.MarshalAuthorizedKey(sshPrivateKey.PublicKey())
+
+		err = os.WriteFile(pubKeyPath, pubKeyData, 0644)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Your new public key is: \n\n%s\n", string(pubKeyData))
+	}
+	return nil
 }
 
 func startMacApp(client *api.Client) error {
@@ -591,7 +684,10 @@ func startMacApp(client *api.Client) error {
 }
 
 func checkServerHeartbeat(_ *cobra.Command, _ []string) error {
-	client := api.NewClient()
+	client, err := api.FromEnv()
+	if err != nil {
+		return err
+	}
 	if err := client.Heartbeat(context.Background()); err != nil {
 		if !strings.Contains(err.Error(), "connection refused") {
 			return err
@@ -611,9 +707,10 @@ func NewCLI() *cobra.Command {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	rootCmd := &cobra.Command{
-		Use:          "ollama",
-		Short:        "Large language model runner",
-		SilenceUsage: true,
+		Use:           "ollama",
+		Short:         "Large language model runner",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		CompletionOptions: cobra.CompletionOptions{
 			DisableDefaultCmd: true,
 		},
@@ -647,10 +744,6 @@ func NewCLI() *cobra.Command {
 		Short:   "Start ollama",
 		RunE:    RunServer,
 	}
-
-	serveCmd.Flags().String("port", "11434", "Port to listen on, may also use OLLAMA_PORT environment variable")
-	serveCmd.Flags().String("host", "127.0.0.1", "Host listen address, may also use OLLAMA_HOST environment variable")
-	serveCmd.Flags().StringSlice("allowed-origins", []string{}, "Additional allowed CORS origins (outside of localhost), specify as comma-separated list")
 
 	pullCmd := &cobra.Command{
 		Use:     "pull MODEL",

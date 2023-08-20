@@ -9,10 +9,18 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
+)
+
+const DefaultHost = "localhost:11434"
+
+var (
+	envHost = os.Getenv("OLLAMA_HOST")
 )
 
 type Client struct {
-	base    url.URL
+	Base    url.URL
 	HTTP    http.Client
 	Headers http.Header
 }
@@ -33,16 +41,34 @@ func checkError(resp *http.Response, body []byte) error {
 	return apiError
 }
 
-func NewClient(hosts ...string) *Client {
-	host := "127.0.0.1:11434"
-	if len(hosts) > 0 {
-		host = hosts[0]
+// Host returns the default host to use for the client. It is determined in the following order:
+// 1. The OLLAMA_HOST environment variable
+// 2. The default host (localhost:11434)
+func Host() string {
+	if envHost != "" {
+		return envHost
+	}
+	return DefaultHost
+}
+
+// FromEnv creates a new client using Host() as the host. An error is returns
+// if the host is invalid.
+func FromEnv() (*Client, error) {
+	h := Host()
+	if !strings.HasPrefix(h, "http://") && !strings.HasPrefix(h, "https://") {
+		h = "http://" + h
 	}
 
-	return &Client{
-		base: url.URL{Scheme: "http", Host: host},
-		HTTP: http.Client{},
+	u, err := url.Parse(h)
+	if err != nil {
+		return nil, fmt.Errorf("could not parse host: %w", err)
 	}
+
+	if u.Port() == "" {
+		u.Host += ":11434"
+	}
+
+	return &Client{Base: *u, HTTP: http.Client{}}, nil
 }
 
 func (c *Client) do(ctx context.Context, method, path string, reqData, respData any) error {
@@ -57,7 +83,7 @@ func (c *Client) do(ctx context.Context, method, path string, reqData, respData 
 		reqBody = bytes.NewReader(data)
 	}
 
-	url := c.base.JoinPath(path).String()
+	url := c.Base.JoinPath(path).String()
 
 	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
 	if err != nil {
@@ -105,7 +131,7 @@ func (c *Client) stream(ctx context.Context, method, path string, data any, fn f
 		buf = bytes.NewBuffer(bts)
 	}
 
-	request, err := http.NewRequestWithContext(ctx, method, c.base.JoinPath(path).String(), buf)
+	request, err := http.NewRequestWithContext(ctx, method, c.Base.JoinPath(path).String(), buf)
 	if err != nil {
 		return err
 	}

@@ -29,7 +29,9 @@ ollama run llama2
 
 ## Model library
 
-`ollama` includes a library of open-source models:
+Ollama supports a list of open-source models available on [ollama.ai/library](https://ollama.ai/library "ollama model library") 
+
+Here are some example open-source models that can be downloaded: 
 
 | Model                    | Parameters | Size  | Download                        |
 | ------------------------ | ---------- | ----- | ------------------------------- |
@@ -37,9 +39,10 @@ ollama run llama2
 | Llama2 13B               | 13B        | 7.3GB | `ollama pull llama2:13b`        |
 | Llama2 70B               | 70B        | 39GB  | `ollama pull llama2:70b`        |
 | Llama2 Uncensored        | 7B         | 3.8GB | `ollama pull llama2-uncensored` |
-| Orca Mini                | 3B         | 1.9GB | `ollama pull orca`              |
+| Orca Mini                | 3B         | 1.9GB | `ollama pull orca-mini`         |
 | Vicuna                   | 7B         | 3.8GB | `ollama pull vicuna`            |
-| Nous-Hermes              | 13B        | 7.3GB | `ollama pull nous-hermes`       |
+| Nous-Hermes              | 7B         | 3.8GB | `ollama pull nous-hermes`       |
+| Nous-Hermes 13B          | 13B        | 7.3GB | `ollama pull nous-hermes:13b`   |
 | Wizard Vicuna Uncensored | 13B        | 7.3GB | `ollama pull wizard-vicuna`     |
 
 > Note: You should have at least 8 GB of RAM to run the 3B models, 16 GB to run the 7B models, and 32 GB to run the 13B models.
@@ -52,6 +55,15 @@ ollama run llama2
 ollama run llama2
 >>> hi
 Hello! How can I help you today?
+```
+
+For multiline input, you can wrap text with `"""`:
+
+```
+>>> """Hello,
+... world!
+... """
+I'm a basic program that prints the famous "Hello, world!" message to the console.
 ```
 
 ### Create a custom model
@@ -87,9 +99,7 @@ ollama run mario
 Hello! It's your friend Mario.
 ```
 
-For more examples, see the [examples](./examples) directory.
-
-For more information on creating a Modelfile, see the [Modelfile](./docs/modelfile.md) documentation.
+For more examples, see the [examples](./examples) directory. For more information on creating a Modelfile, see the [Modelfile](./docs/modelfile.md) documentation.
 
 ### Pull a model from the registry
 
@@ -149,6 +159,8 @@ curl -X POST http://localhost:11434/api/generate -d '{
 
 - [LangChain](https://python.langchain.com/docs/integrations/llms/ollama) and [LangChain.js](https://js.langchain.com/docs/modules/model_io/models/llms/integrations/ollama) with a question-answering [example](https://js.langchain.com/docs/use_cases/question_answering/local_retrieval_qa).
 - [Continue](https://github.com/continuedev/continue) - embeds Ollama inside Visual Studio Code. The extension lets you highlight code to add to the prompt, ask questions in the sidebar, and generate code inline.
+- [LiteLLM](https://github.com/BerriAI/litellm) a lightweight python package to simplify LLM API calls
 - [Discord AI Bot](https://github.com/mekb-turtle/discord-ai-bot) - interact with Ollama as a chatbot on Discord.
 - [Raycast Ollama](https://github.com/MassimilianoPasquini97/raycast_ollama) - Raycast extension to use Ollama for local llama inference on Raycast.
 - [Simple HTML UI for Ollama](https://github.com/rtcfirefly/ollama-ui)
+- [Emacs client](https://github.com/zweifisch/ollama) for Ollama
