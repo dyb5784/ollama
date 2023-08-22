@@ -46,7 +46,7 @@ Loading documents from source_documents
 Loading new documents: 100%|██████████████████████| 1/1 [00:01<00:00,  1.73s/it]
 Loaded 1 new documents from source_documents
 Split into 90 chunks of text (max. 500 tokens each)
-Creating embeddings. May take some minutes...
+Creating embeddings. May take some minutes..
 Using embedded DuckDB with persistence: data will be stored in: db
 Ingestion complete! You can now run privateGPT.py to query your documents
 ```
