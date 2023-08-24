@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,42 +25,46 @@ const (
 	DefaultProtocolScheme = "https"
 )
 
+var (
+	ErrInvalidImageFormat = errors.New("invalid image format")
+	ErrInvalidProtocol    = errors.New("invalid protocol scheme")
+	ErrInsecureProtocol   = errors.New("insecure protocol http")
+)
+
 func ParseModelPath(name string) ModelPath {
-	slashParts := strings.Split(name, "/")
-	var registry, namespace, repository, tag string
-
-	switch len(slashParts) {
-	case 3:
-		registry = slashParts[0]
-		namespace = slashParts[1]
-		repository = strings.Split(slashParts[2], ":")[0]
-	case 2:
-		registry = DefaultRegistry
-		namespace = slashParts[0]
-		repository = strings.Split(slashParts[1], ":")[0]
-	case 1:
-		registry = DefaultRegistry
-		namespace = DefaultNamespace
-		repository = strings.Split(slashParts[0], ":")[0]
-	default:
-		fmt.Println("Invalid image format.")
-		return ModelPath{}
-	}
-
-	colonParts := strings.Split(slashParts[len(slashParts)-1], ":")
-	if len(colonParts) == 2 {
-		tag = colonParts[1]
-	} else {
-		tag = DefaultTag
-	}
-
-	return ModelPath{
+	mp := ModelPath{
 		ProtocolScheme: DefaultProtocolScheme,
-		Registry:       registry,
-		Namespace:      namespace,
-		Repository:     repository,
-		Tag:            tag,
+		Registry:       DefaultRegistry,
+		Namespace:      DefaultNamespace,
+		Repository:     "",
+		Tag:            DefaultTag,
 	}
+
+	before, after, found := strings.Cut(name, "://")
+	if found {
+		mp.ProtocolScheme = before
+		name = after
+	}
+
+	parts := strings.Split(name, "/")
+	switch len(parts) {
+	case 3:
+		mp.Registry = parts[0]
+		mp.Namespace = parts[1]
+		mp.Repository = parts[2]
+	case 2:
+		mp.Namespace = parts[0]
+		mp.Repository = parts[1]
+	case 1:
+		mp.Repository = parts[0]
+	}
+
+	if repo, tag, found := strings.Cut(mp.Repository, ":"); found {
+		mp.Repository = repo
+		mp.Tag = tag
+	}
+
+	return mp
 }
 
 func (mp ModelPath) GetNamespaceRepository() string {
@@ -93,6 +99,13 @@ func (mp ModelPath) GetManifestPath(createDir bool) (string, error) {
 	}
 
 	return path, nil
+}
+
+func (mp ModelPath) BaseURL() *url.URL {
+	return &url.URL{
+		Scheme: mp.ProtocolScheme,
+		Host:   mp.Registry,
+	}
 }
 
 func GetManifestPath() (string, error) {
