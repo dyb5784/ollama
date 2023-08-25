@@ -19,7 +19,33 @@ Install the Python dependencies:
 pip install -r requirements.txt
 ### Win 10/11: if hnswlib wheels issue need MS C++ build tools and SDK see  https://stackoverflow.com/questions/73969269/error-could-not-build-wheels-for-hnswlib-which-is-required-to-install-pyprojec
 ```
+If you get error "Detecting C compiler ABI info - failed"
+first run
+```
+call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" amd64
+```
+the pip3 install -r requirements.txt
 
+if you get "This error might have occurred since this system does not have Windows Long Path support enabled."
+open PS as admin and enable long path 
+```
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem" -Name "LongPathsEnabled" -Value 1 -PropertyType DWORD -Force
+```
+
+If you get a validation error for the model and path and checksum is correct, downgrade gpt4all to v 0.2.3 https://github.com/imartinez/privateGPT/issues/691
+```
+pip3 install --upgrade gpt4all==0.2.3 
+```
+
+
+if you get "warning: Unable to connect optimized C data functions [No module named '_testbuffer'], falling back to pure Python #723" https://github.com/imartinez/privateGPT/issues/723#issuecomment-1597372760
+downgrade clickhouse-connect to v 0.5.22
+```
+pip install --upgrade clickhouse-connect==0.5.22
+```
+
+To check the MD5 hash of your models (eg for ggml-gpt4all-j-v1.3-groovy.bin MD5 it's 81a09a0ddf89690372fc296ff7f625af ) https://raw.githubusercontent.com/nomic-ai/gpt4all/main/gpt4all-chat/metadata/models.json
+----
 Pull the model you'd like to use:
 
 ```
