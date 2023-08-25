@@ -17,6 +17,7 @@ Install the Python dependencies:
 
 ```shell
 pip install -r requirements.txt
+### Win 10/11: if hnswlib wheels issue need MS C++ build tools and SDK see  https://stackoverflow.com/questions/73969269/error-could-not-build-wheels-for-hnswlib-which-is-required-to-install-pyprojec
 ```
 
 Pull the model you'd like to use:
