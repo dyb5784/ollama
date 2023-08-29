@@ -141,7 +141,7 @@ PARAMETER <parameter> <parametervalue>
 | `{{ .First }}`  | A boolean value used to render specific template information for the first generation of a session.          |
 
 ```
-TEMPLATE """
+``TEMPLATE """
 {{- if .First }}
 ### System:
 {{ .System }}
