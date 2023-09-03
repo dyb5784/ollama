@@ -1,4 +1,4 @@
-For 2023, https://www.reddit.com/r/LocalLLaMA/comments/164xiuc/comment/jyau2z4/?utm_source=share&utm_medium=web2x&context=3
+For 2023, https://www.rddit.com/r/LocalLLaMA/comments/164xiuc/comment/jyau2z4/?utm_source=share&utm_medium=web2x&context=3
 
 In January, Anthropic released Claude v1, a 100 billion parameter LLM that aims to be more interpretable, robust, and aligned with human values. Claude v1 uses a novel architecture called the Causal Transformer, which can model both causal and non-causal dependencies in natural language. Claude v1 also incorporates human feedback and adversarial testing to improve its performance and safety1
 
