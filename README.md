@@ -50,7 +50,15 @@ Here are some example open-source models that can be downloaded:
 
 ## Examples
 
-### Run a model
+### Pull a public model
+
+```
+ollama pull llama2
+```
+
+> This command can also be used to update a local model. Only updated changes will be pulled.
+
+### Run a model interactively
 
 ```
 ollama run llama2
@@ -67,15 +75,45 @@ For multiline input, you can wrap text with `"""`:
 I'm a basic program that prints the famous "Hello, world!" message to the console.
 ```
 
-### Create a custom model
+### Run a model non-interactively
+
+```
+$ ollama run llama2 'tell me a joke'
+ Sure! Here's a quick one:
+ Why did the scarecrow win an award? Because he was outstanding in his field!
+```
+
+```
+$ cat <<EOF >prompts.txt
+tell me a joke about llamas
+tell me another one
+EOF
+$ ollama run llama2 <prompts.txt
+>>> tell me a joke about llamas
+ Why did the llama refuse to play hide-and-seek?
+ nobody likes to be hided!
+
+>>> tell me another one
+ Sure, here's another one:
+
+Why did the llama go to the bar?
+To have a hay-often good time!
+```
+
+### Run a model on contents of a text file
+
+```
+$ ollama run llama2 "summarize this file:" "$(cat README.md)"
+ Ollama is a lightweight, extensible framework for building and running language models on the local machine. It provides a simple API for creating, running, and managing models, as well as a library of pre-built models that can be easily used in a variety of applications.
+```
+
+### Customize a model
 
 Pull a base model:
 
 ```
 ollama pull llama2
 ```
-
-> To update a model to the latest version, run `ollama pull llama2` again. The model will be updated (if necessary).
 
 Create a `Modelfile`:
 
@@ -102,23 +140,23 @@ Hello! It's your friend Mario.
 
 For more examples, see the [examples](./examples) directory. For more information on creating a Modelfile, see the [Modelfile](./docs/modelfile.md) documentation.
 
-### Pull a model from the registry
-
-```
-ollama pull orca-mini
-```
-
 ### Listing local models
 
 ```
 ollama list
 ```
 
+### Removing local models
+
+```
+ollama rm llama2
+```
+
 ## Model packages
 
 ### Overview
 
-Ollama bundles model weights, configuration, and data into a single package, defined by a [Modelfile](./docs/modelfile.md).
+Ollama bundles model weights, configurations, and data into a single package, defined by a [Modelfile](./docs/modelfile.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" height="480" srcset="https://github.com/jmorganca/ollama/assets/251292/2fd96b5f-191b-45c1-9668-941cfad4eb70">
@@ -146,7 +184,7 @@ Next, start the server:
 ./ollama serve
 ```
 
-Finally, run a model (in another shell):
+Finally, in a separate shell, run a model:
 
 ```
 ./ollama run llama2
@@ -165,7 +203,7 @@ curl -X POST http://localhost:11434/api/generate -d '{
 }'
 ```
 
-## Tools using Ollama
+## Community Projects using Ollama
 
 - [LangChain](https://python.langchain.com/docs/integrations/llms/ollama) and [LangChain.js](https://js.langchain.com/docs/modules/model_io/models/llms/integrations/ollama) with a question-answering [example](https://js.langchain.com/docs/use_cases/question_answering/local_retrieval_qa).
 - [Continue](https://github.com/continuedev/continue) - embeds Ollama inside Visual Studio Code. The extension lets you highlight code to add to the prompt, ask questions in the sidebar, and generate code inline.
