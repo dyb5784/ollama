@@ -13,9 +13,9 @@ import streamlit as st
 
 def init_page() -> None:
     st.set_page_config(
-        page_title="Personal ChatGPT"
+        page_title="Local LLM GUI"
     )
-    st.header("Personal ChatGPT")
+    st.header("Local LLM UI")
     st.sidebar.title("Options")
 
 
@@ -24,12 +24,12 @@ def init_messages() -> None:
     if clear_button or "messages" not in st.session_state:
         st.session_state.messages = [
             SystemMessage(
-                content="You are a helpful AI assistant. Reply your answer in mardkown format.")
+                content="**[OMNICOMP]:COMPETENCE ACCESS STRATEGY! TEACHES MODEL TO THINK WELL ABOUT SKILLS:[OMNICOMP2.1R_v2]=>[OMNICMP2.1R_v2]=>[OptmzdSkllchn]>[ChainConstructor(1a-IdCoreSkills-1b-BalanceSC-1c-ModularityScalability-1d-IterateRefine-1e-FeedbackMechanism-1f-ComplexityEstimator)]-[ChainSelector(2a-MapRelatedChains-2b-EvalComplementarity-2c-CombineChains-2d-RedundanciesOverlap-2e-RefineUnifiedChain-2f-OptimizeResourceMgmt)]-[SkillgraphMaker(3a-IdGraphComponents-3b-AbstractNodeRelations-3b.1-GeneralSpecificClassifier(3b.1a-ContextAnalysis--3b.1b-DataExtraction--3b.1c-FeatureMapping--3b.1d-PatternRecognition--3b.1e-IterateRefine)--3c-CreateNumericCode-3d-LinkNodes-3e-RepresentSkillGraph-3f-IterateRefine-3g-AdaptiveProcesses-3h-ErrorHandlingRecovery)]=>[SKILLGRAPH4.1R_v2]**")
         ]
         st.session_state.costs = []
 
 
-def select_llm() -> Union[ChatOpenAI, LlamaCpp]:
+def select_llm() -> LlamaCpp:
     model_name = st.sidebar.radio("Choose LLM:",
                                   ("everythinglm:13b-16k-q8_0", "llama2-uncensored",
                                    "wizard-vicuna"))
@@ -39,14 +39,22 @@ def select_llm() -> Union[ChatOpenAI, LlamaCpp]:
      #   return ChatOpenAI(temperature=temperature, model_name=model_name)
     #elif model_name.startswith("llama2-"):
     callback_manager = CallbackManager([StreamingStdOutCallbackHandler()])
+    if {model_name}:
+        print({model_name})
+        print(temperature)
     return LlamaCpp(
-            # model_path=f"./models/{model_name}.bin",
             model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-4f8a6c6dfd38b66e4446f0cc938aad5db3b5e309447f8fb0ac7a359bb75a3fe6",
-            input={"temperature": temperature,
-                   "max_length": 2000,
-                   "top_p": 1
-                   },
+            #model_path=f"C://Users//danie//.ollama//models//blobs//sha256-71933c553b9c8c8720dc467b3788bb5625d4ab8b4b368c7c5b55f6fbae70931e",
             callback_manager=callback_manager,
+            temperature=temperature,
+            max_tokens=2048,
+            top_p=1,  
+            rope_freq_scale=1, 
+            #rope_freq_base= 1000,     
+            #input={"temperature": temperature,
+             #      "max_length": 2000,
+              #     "top_p": 1
+               #    },
             verbose=False,  # True
         )
 
