@@ -1,7 +1,7 @@
 # app.py
 # [!WARNING] Starting with version 0.1.79 the model format has changed from ggmlv3 to gguf. Old model files can be converted using the convert-llama-ggmlv3-to-gguf.py script in llama.cpp
 # python3 vendor/llama.cpp/convert-llama-ggmlv3-to-gguf.py --input <path-to-ggml> --output <path-to-gguf>
-
+# needed to downgrade pip install gguf==0.2.1s to get rid of AttributeError: 'TensorNameMap' object has no attribute 'get'running the conversion script
 from typing import List, Union
 
 from dotenv import load_dotenv, find_dotenv
@@ -35,7 +35,7 @@ def init_messages() -> None:
 def select_llm() -> LlamaCpp:
     model_name = st.sidebar.radio("Choose LLM:",
                                   ("everythinglm:13b-16k-q8_0", "llama2-uncensored",
-                                   "wizard-vicuna","nous-hermes"))
+                                   "wizard-vicuna","noushermes-qquf"))
     temperature = st.sidebar.slider("Temperature:", min_value=0.0,
                                     max_value=1.0, value=0.0, step=0.01)
     #if model_name.startswith("gpt-"):
@@ -49,7 +49,8 @@ def select_llm() -> LlamaCpp:
             #model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-4f8a6c6dfd38b66e4446f0cc938aad5db3b5e309447f8fb0ac7a359bb75a3fe6",
             #model_path=f"C://Users//danie//.ollama//models//blobs//sha256-71933c553b9c8c8720dc467b3788bb5625d4ab8b4b368c7c5b55f6fbae70931e",
             # nous-hermes sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4
-            model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4",
+            # model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4",
+            model_path=f"D:\\models\\noushermes-qquf",
             callback_manager=callback_manager,
             temperature=temperature,
             max_tokens=2048,
@@ -141,7 +142,7 @@ def main() -> None:
     # Supervise user input
     if user_input := st.chat_input("Input your question!"):
         st.session_state.messages.append(HumanMessage(content=user_input))
-        with st.spinner("ChatGPT is typing ..."):
+        with st.spinner("LLM is thinking and typing ..."):
             answer, cost = get_answer(llm, st.session_state.messages)
         st.session_state.messages.append(AIMessage(content=answer))
         st.session_state.costs.append(cost)
