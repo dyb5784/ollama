@@ -1,4 +1,7 @@
 # app.py
+# [!WARNING] Starting with version 0.1.79 the model format has changed from ggmlv3 to gguf. Old model files can be converted using the convert-llama-ggmlv3-to-gguf.py script in llama.cpp
+# python3 vendor/llama.cpp/convert-llama-ggmlv3-to-gguf.py --input <path-to-ggml> --output <path-to-gguf>
+
 from typing import List, Union
 
 from dotenv import load_dotenv, find_dotenv
@@ -32,7 +35,7 @@ def init_messages() -> None:
 def select_llm() -> LlamaCpp:
     model_name = st.sidebar.radio("Choose LLM:",
                                   ("everythinglm:13b-16k-q8_0", "llama2-uncensored",
-                                   "wizard-vicuna"))
+                                   "wizard-vicuna","nous-hermes"))
     temperature = st.sidebar.slider("Temperature:", min_value=0.0,
                                     max_value=1.0, value=0.0, step=0.01)
     #if model_name.startswith("gpt-"):
@@ -43,8 +46,10 @@ def select_llm() -> LlamaCpp:
         print({model_name})
         print(temperature)
     return LlamaCpp(
-            model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-4f8a6c6dfd38b66e4446f0cc938aad5db3b5e309447f8fb0ac7a359bb75a3fe6",
+            #model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-4f8a6c6dfd38b66e4446f0cc938aad5db3b5e309447f8fb0ac7a359bb75a3fe6",
             #model_path=f"C://Users//danie//.ollama//models//blobs//sha256-71933c553b9c8c8720dc467b3788bb5625d4ab8b4b368c7c5b55f6fbae70931e",
+            # nous-hermes sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4
+            model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4",
             callback_manager=callback_manager,
             temperature=temperature,
             max_tokens=2048,
