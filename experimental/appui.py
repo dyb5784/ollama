@@ -34,10 +34,10 @@ def init_messages() -> None:
 
 def select_llm() -> LlamaCpp:
     model_name = st.sidebar.radio("Choose LLM:",
-                                  ("everythinglm:13b-16k-q8_0", "llama2-uncensored",
-                                   "wizard-vicuna","noushermes-qquf"))
+                                  ("llama2uncensored-qquf",
+                                   "noushermes-qquf"))
     temperature = st.sidebar.slider("Temperature:", min_value=0.0,
-                                    max_value=1.0, value=0.0, step=0.01)
+                                    max_value=1.0, value=0.7, step=0.01)
     #if model_name.startswith("gpt-"):
      #   return ChatOpenAI(temperature=temperature, model_name=model_name)
     #elif model_name.startswith("llama2-"):
@@ -50,12 +50,13 @@ def select_llm() -> LlamaCpp:
             #model_path=f"C://Users//danie//.ollama//models//blobs//sha256-71933c553b9c8c8720dc467b3788bb5625d4ab8b4b368c7c5b55f6fbae70931e",
             # nous-hermes sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4
             # model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\sha256-ed1043d21e9811e0ba9e9d72f2c3b451cb63ffcc26032b8958cc486ddca005a4",
-            model_path=f"D:\\models\\noushermes-qquf",
+            model_path=f"C:\\Users\\danie\\.ollama\\models\\blobs\\{model_name}",
+            
             callback_manager=callback_manager,
             temperature=temperature,
-            max_tokens=2048,
-            top_p=1,  
-            rope_freq_scale=1, 
+            max_tokens=4096,
+            #top_p=1,  
+            #rope_freq_scale=1, 
             #rope_freq_base= 1000,     
             #input={"temperature": temperature,
              #      "max_length": 2000,
