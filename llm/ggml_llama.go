@@ -45,6 +45,7 @@ func osPath(llamaPath string) string {
 	if runtime.GOOS == "windows" {
 		return path.Join(llamaPath, "Release")
 	}
+
 	return llamaPath
 }
 
@@ -68,7 +69,9 @@ func initGGML() {
 		case "windows":
 			files = []string{"server.exe"}
 		case "darwin":
-			files = append(files, "ggml-metal.metal")
+			if llamaPath == osPath(ggmlGPU) {
+				files = append(files, "ggml-metal.metal")
+			}
 		}
 
 		for _, f := range files {
@@ -497,8 +500,10 @@ func (llm *llama) Predict(ctx context.Context, prevContext []int, prompt string,
 					return fmt.Errorf("error unmarshaling llm prediction response: %v", err)
 				}
 
-				fn(api.GenerateResponse{Response: p.Content})
-				nextContext.WriteString(p.Content)
+				if p.Content != "" {
+					fn(api.GenerateResponse{Response: p.Content})
+					nextContext.WriteString(p.Content)
+				}
 
 				if p.Stop {
 					embd, err := llm.Encode(ctx, nextContext.String())
