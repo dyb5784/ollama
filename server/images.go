@@ -116,6 +116,7 @@ type LayerReader struct {
 type ConfigV2 struct {
 	ModelFamily llm.ModelFamily `json:"model_family"`
 	ModelType   string          `json:"model_type"`
+	ModelFormat string          `json:"model_format"`
 	FileType    string          `json:"file_type"`
 	RootFS      RootFS          `json:"rootfs"`
 
@@ -335,6 +336,7 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 
 					config.ModelFamily = ggml.ModelFamily()
 					config.ModelType = ggml.ModelType().String()
+					config.ModelFormat = ggml.Name()
 					config.FileType = ggml.FileType().String()
 
 					// reset the file
@@ -369,6 +371,7 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 				// copie the model metadata
 				config.ModelFamily = source.ModelFamily
 				config.ModelType = source.ModelType
+				config.ModelFormat = source.ModelFormat
 				config.FileType = source.FileType
 
 				for _, l := range mf.Layers {
@@ -1300,7 +1303,7 @@ func makeRequestWithRetry(ctx context.Context, method string, requestURL *url.UR
 }
 
 func makeRequest(ctx context.Context, method string, requestURL *url.URL, headers http.Header, body io.Reader, regOpts *RegistryOptions) (*http.Response, error) {
-	if requestURL.Scheme != "http" && regOpts.Insecure {
+	if requestURL.Scheme != "http" && regOpts != nil && regOpts.Insecure {
 		requestURL.Scheme = "http"
 	}
 
@@ -1313,10 +1316,12 @@ func makeRequest(ctx context.Context, method string, requestURL *url.URL, header
 		req.Header = headers
 	}
 
-	if regOpts.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+regOpts.Token)
-	} else if regOpts.Username != "" && regOpts.Password != "" {
-		req.SetBasicAuth(regOpts.Username, regOpts.Password)
+	if regOpts != nil {
+		if regOpts.Token != "" {
+			req.Header.Set("Authorization", "Bearer "+regOpts.Token)
+		} else if regOpts.Username != "" && regOpts.Password != "" {
+			req.SetBasicAuth(regOpts.Username, regOpts.Password)
+		}
 	}
 
 	req.Header.Set("User-Agent", fmt.Sprintf("ollama/%s (%s %s) Go/%s", version.Version, runtime.GOARCH, runtime.GOOS, runtime.Version()))
