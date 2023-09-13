@@ -58,6 +58,12 @@ func chooseRunner(gpuPath, cpuPath string) string {
 		if llamaPath == osPath(gpuPath) {
 			files = append(files, "ggml-metal.metal")
 		}
+	case "linux":
+		// check if there is a GPU available
+		if _, err := CheckVRAM(); errors.Is(err, errNoGPU) {
+			// this error was logged on start-up, so we don't need to log it again
+			llamaPath = osPath(cpuPath)
+		}
 	}
 
 	for _, f := range files {
@@ -89,38 +95,39 @@ func chooseRunner(gpuPath, cpuPath string) string {
 	return runPath
 }
 
-const ModelFamilyLlama ModelFamily = "llama"
-
 type llamaModel struct {
 	hyperparameters llamaHyperparameters
 }
 
-func (llm *llamaModel) ModelFamily() ModelFamily {
-	return ModelFamilyLlama
+func (llm *llamaModel) ModelFamily() string {
+	return "llama"
 }
 
-func (llm *llamaModel) ModelType() ModelType {
-	switch llm.hyperparameters.NumLayer {
+func llamaModelType(numLayer uint32) string {
+	switch numLayer {
 	case 26:
-		return ModelType3B
+		return "3B"
 	case 32:
-		return ModelType7B
+		return "7B"
 	case 40:
-		return ModelType13B
+		return "13B"
 	case 48:
-		return ModelType34B
+		return "34B"
 	case 60:
-		return ModelType30B
+		return "30B"
 	case 80:
-		return ModelType65B
+		return "65B"
+	default:
+		return "Unknown"
 	}
-
-	// TODO: find a better default
-	return ModelType7B
 }
 
-func (llm *llamaModel) FileType() FileType {
-	return llm.hyperparameters.FileType
+func (llm *llamaModel) ModelType() string {
+	return llamaModelType(llm.hyperparameters.NumLayer)
+}
+
+func (llm *llamaModel) FileType() string {
+	return fileType(llm.hyperparameters.FileType)
 }
 
 type llamaHyperparameters struct {
@@ -137,70 +144,7 @@ type llamaHyperparameters struct {
 	NumRot   uint32
 
 	// FileType describes the quantization level of the model, e.g. Q4_0, Q5_K, etc.
-	FileType llamaFileType
-}
-
-type llamaFileType uint32
-
-const (
-	llamaFileTypeF32 llamaFileType = iota
-	llamaFileTypeF16
-	llamaFileTypeQ4_0
-	llamaFileTypeQ4_1
-	llamaFileTypeQ4_1_F16
-	llamaFileTypeQ8_0 llamaFileType = iota + 2
-	llamaFileTypeQ5_0
-	llamaFileTypeQ5_1
-	llamaFileTypeQ2_K
-	llamaFileTypeQ3_K_S
-	llamaFileTypeQ3_K_M
-	llamaFileTypeQ3_K_L
-	llamaFileTypeQ4_K_S
-	llamaFileTypeQ4_K_M
-	llamaFileTypeQ5_K_S
-	llamaFileTypeQ5_K_M
-	llamaFileTypeQ6_K
-)
-
-func (ft llamaFileType) String() string {
-	switch ft {
-	case llamaFileTypeF32:
-		return "F32"
-	case llamaFileTypeF16:
-		return "F16"
-	case llamaFileTypeQ4_0:
-		return "Q4_0"
-	case llamaFileTypeQ4_1:
-		return "Q4_1"
-	case llamaFileTypeQ4_1_F16:
-		return "Q4_1_F16"
-	case llamaFileTypeQ8_0:
-		return "Q8_0"
-	case llamaFileTypeQ5_0:
-		return "Q5_0"
-	case llamaFileTypeQ5_1:
-		return "Q5_1"
-	case llamaFileTypeQ2_K:
-		return "Q2_K"
-	case llamaFileTypeQ3_K_S:
-		return "Q3_K_S"
-	case llamaFileTypeQ3_K_M:
-		return "Q3_K_M"
-	case llamaFileTypeQ3_K_L:
-		return "Q3_K_L"
-	case llamaFileTypeQ4_K_S:
-		return "Q4_K_S"
-	case llamaFileTypeQ4_K_M:
-		return "Q4_K_M"
-	case llamaFileTypeQ5_K_S:
-		return "Q5_K_S"
-	case llamaFileTypeQ5_K_M:
-		return "Q5_K_M"
-	case llamaFileTypeQ6_K:
-		return "Q6_K"
-	default:
-		return "Unknown"
-	}
+	FileType uint32
 }
 
 type Running struct {
@@ -216,6 +160,72 @@ type ModelRunner struct {
 type llama struct {
 	api.Options
 	Running
+}
+
+var errNoGPU = errors.New("nvidia-smi command failed")
+
+// CheckVRAM returns the available VRAM in MiB on Linux machines with NVIDIA GPUs
+func CheckVRAM() (int, error) {
+	cmd := exec.Command("nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	err := cmd.Run()
+	if err != nil {
+		return 0, errNoGPU
+	}
+
+	var total int
+	scanner := bufio.NewScanner(&stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		vram, err := strconv.Atoi(line)
+		if err != nil {
+			return 0, fmt.Errorf("failed to parse available VRAM: %v", err)
+		}
+
+		total += vram
+	}
+
+	return total, nil
+}
+
+func NumGPU(opts api.Options) int {
+	if opts.NumGPU != -1 {
+		return opts.NumGPU
+	}
+	n := 1 // default to enable metal on macOS
+	if runtime.GOOS == "linux" {
+		vram, err := CheckVRAM()
+		if err != nil {
+			if err.Error() != "nvidia-smi command failed" {
+				log.Print(err.Error())
+			}
+			// nvidia driver not installed or no nvidia GPU found
+			return 0
+		}
+		// TODO: this is a very rough heuristic, better would be to calculate this based on number of layers and context size
+		switch {
+		case vram < 500:
+			log.Printf("WARNING: Low VRAM detected, disabling GPU")
+			n = 0
+		case vram < 1000:
+			n = 4
+		case vram < 2000:
+			n = 8
+		case vram < 4000:
+			n = 12
+		case vram < 8000:
+			n = 16
+		case vram < 12000:
+			n = 24
+		case vram < 16000:
+			n = 32
+		default:
+			n = 48
+		}
+		log.Printf("%d MB VRAM available, loading %d GPU layers", vram, n)
+	}
+	return n
 }
 
 func newLlama(model string, adapters []string, runner ModelRunner, opts api.Options) (*llama, error) {
@@ -237,7 +247,7 @@ func newLlama(model string, adapters []string, runner ModelRunner, opts api.Opti
 		"--rope-freq-base", fmt.Sprintf("%f", opts.RopeFrequencyBase),
 		"--rope-freq-scale", fmt.Sprintf("%f", opts.RopeFrequencyScale),
 		"--batch-size", fmt.Sprintf("%d", opts.NumBatch),
-		"--n-gpu-layers", fmt.Sprintf("%d", opts.NumGPU),
+		"--n-gpu-layers", fmt.Sprintf("%d", NumGPU(opts)),
 		"--embedding",
 	}
 
@@ -305,7 +315,7 @@ func newLlama(model string, adapters []string, runner ModelRunner, opts api.Opti
 func waitForServer(llm *llama) error {
 	// wait for the server to start responding
 	start := time.Now()
-	expiresAt := time.Now().Add(30 * time.Second)
+	expiresAt := time.Now().Add(45 * time.Second)
 	ticker := time.NewTicker(200 * time.Millisecond)
 
 	log.Print("waiting for llama.cpp server to start responding")
