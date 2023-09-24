@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"sync"
 )
 
 type GGML struct {
@@ -163,18 +162,6 @@ func (c *containerLORA) Decode(r io.Reader) (model, error) {
 
 	c.version = version
 	return nil, nil
-}
-
-var (
-	ggmlInit       sync.Once
-	ggmlRunnerPath string
-)
-
-func ggmlRunner() ModelRunner {
-	ggmlInit.Do(func() {
-		ggmlRunnerPath = chooseRunner("ggml")
-	})
-	return ModelRunner{Path: ggmlRunnerPath}
 }
 
 const (

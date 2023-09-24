@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -268,7 +267,7 @@ func filenameWithPath(path, f string) (string, error) {
 	return f, nil
 }
 
-func CreateModel(ctx context.Context, name string, path string, fn func(resp api.ProgressResponse)) error {
+func CreateModel(ctx context.Context, workDir, name string, path string, fn func(resp api.ProgressResponse)) error {
 	mp := ParseModelPath(name)
 
 	var manifest *ManifestV2
@@ -391,7 +390,7 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 					return err
 				}
 
-				// copie the model metadata
+				// copy the model metadata
 				config.ModelFamily = source.ModelFamily
 				config.ModelType = source.ModelType
 				config.ModelFormat = source.ModelFormat
@@ -461,8 +460,10 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 				return err
 			}
 
-			layer.MediaType = mediaType
-			layers = append(layers, layer)
+			if layer.Size > 0 {
+				layer.MediaType = mediaType
+				layers = append(layers, layer)
+			}
 		case "template", "system", "prompt":
 			fn(api.ProgressResponse{Status: fmt.Sprintf("creating model %s layer", c.Name)})
 			// remove the layer if one exists
@@ -474,8 +475,10 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 				return err
 			}
 
-			layer.MediaType = mediaType
-			layers = append(layers, layer)
+			if layer.Size > 0 {
+				layer.MediaType = mediaType
+				layers = append(layers, layer)
+			}
 		default:
 			// runtime parameters, build a list of args for each parameter to allow multiple values to be specified (ex: multiple stop sequences)
 			params[c.Name] = append(params[c.Name], c.Args)
@@ -521,7 +524,7 @@ func CreateModel(ctx context.Context, name string, path string, fn func(resp api
 	}
 
 	// generate the embedding layers
-	embeddingLayers, err := embeddingLayers(embed)
+	embeddingLayers, err := embeddingLayers(workDir, embed)
 	if err != nil {
 		return err
 	}
@@ -578,7 +581,7 @@ type EmbeddingParams struct {
 }
 
 // embeddingLayers loads the associated LLM and generates the embeddings to be stored from an input file
-func embeddingLayers(e EmbeddingParams) ([]*LayerReader, error) {
+func embeddingLayers(workDir string, e EmbeddingParams) ([]*LayerReader, error) {
 	layers := []*LayerReader{}
 	if len(e.files) > 0 {
 		// check if the model is a file path or a model name
@@ -591,7 +594,7 @@ func embeddingLayers(e EmbeddingParams) ([]*LayerReader, error) {
 			model = &Model{ModelPath: e.model}
 		}
 
-		if err := load(context.Background(), model, e.opts, defaultSessionDuration); err != nil {
+		if err := load(context.Background(), workDir, model, e.opts, defaultSessionDuration); err != nil {
 			return nil, fmt.Errorf("load model to generate embeddings: %v", err)
 		}
 
@@ -1151,14 +1154,14 @@ func PushModel(ctx context.Context, name string, regOpts *RegistryOptions, fn fu
 			Total:  layer.Size,
 		})
 
-		location, err := startUpload(ctx, mp, layer, regOpts)
+		location, chunkSize, err := startUpload(ctx, mp, layer, regOpts)
 		if err != nil {
 			log.Printf("couldn't start upload: %v", err)
 			return err
 		}
 
-		if strings.HasPrefix(path.Base(location.Path), "sha256:") {
-			layer.Digest = path.Base(location.Path)
+		if strings.HasPrefix(filepath.Base(location.Path), "sha256:") {
+			layer.Digest = filepath.Base(location.Path)
 			fn(api.ProgressResponse{
 				Status:    "using existing layer",
 				Digest:    layer.Digest,
@@ -1168,7 +1171,7 @@ func PushModel(ctx context.Context, name string, regOpts *RegistryOptions, fn fu
 			continue
 		}
 
-		if err := uploadBlobChunked(ctx, location, layer, regOpts, fn); err != nil {
+		if err := uploadBlob(ctx, location, layer, chunkSize, regOpts, fn); err != nil {
 			log.Printf("error uploading blob: %v", err)
 			return err
 		}
