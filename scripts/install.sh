@@ -6,15 +6,17 @@ set -eu
 
 status() { echo ">>> $*" >&2; }
 error() { echo "ERROR $*"; exit 1; }
+warning() { echo "WARNING: $*"; }
 
 TEMP_DIR=$(mktemp -d)
 cleanup() { rm -rf $TEMP_DIR; }
 trap cleanup EXIT
 
-required_tools() {
+available() { command -v $1 >/dev/null; }
+require() {
     local MISSING=''
     for TOOL in $*; do
-        if ! command -v $TOOL >/dev/null; then
+        if ! available $TOOL; then
             MISSING="$MISSING $TOOL"
         fi
     done
@@ -33,20 +35,24 @@ esac
 SUDO=
 if [ "$(id -u)" -ne 0 ]; then
     # Running as root, no need for sudo
-    if ! command -v sudo >/dev/null; then
-        error "Ollama install.sh requires elevated privileges. Please re-run as root."
+    if ! available sudo; then
+        error "This script requires superuser permissions. Please re-run as root."
     fi
 
     SUDO="sudo"
 fi
 
-MISSING_TOOLS=$(required_tools curl awk grep sed tee xargs)
-if [ -n "$MISSING_TOOLS" ]; then
-    error "The following tools are required but missing: $MISSING_TOOLS"
+NEEDS=$(require curl awk grep sed tee xargs)
+if [ -n "$NEEDS" ]; then
+    status "ERROR: The following tools are required but missing:"
+    for NEED in $NEEDS; do
+        echo "  - $NEED"
+    done
+    exit 1
 fi
 
 status "Downloading ollama..."
-$SUDO curl -fsSL -o $TEMP_DIR/ollama "https://ollama.ai/download/ollama-linux-$ARCH"
+curl --fail --show-error --location --progress-bar -o $TEMP_DIR/ollama "https://ollama.ai/download/ollama-linux-$ARCH"
 
 status "Installing ollama to /usr/bin..."
 $SUDO install -o0 -g0 -m755 -d /usr/bin
@@ -76,29 +82,45 @@ Group=ollama
 Restart=always
 RestartSec=3
 Environment="HOME=/usr/share/ollama"
+Environment="PATH=$PATH"
 
 [Install]
 WantedBy=default.target
 EOF
-    if [ "$(systemctl is-system-running || echo 'not running')" = 'running' ]; then 
-        status "Enabling and starting ollama service..."
-        $SUDO systemctl daemon-reload
-        $SUDO systemctl enable ollama
-        $SUDO systemctl restart ollama
-    fi
+    SYSTEMCTL_RUNNING="$(systemctl is-system-running || true)"
+    case $SYSTEMCTL_RUNNING in
+        running|degraded)
+            status "Enabling and starting ollama service..."
+            $SUDO systemctl daemon-reload
+            $SUDO systemctl enable ollama
+
+            start_service() { $SUDO systemctl restart ollama; }
+            trap start_service EXIT
+            ;;
+    esac
 }
 
-if command -v systemctl >/dev/null; then
+if available systemctl; then
     configure_systemd
+fi
+
+if ! available lspci && ! available lshw; then
+    warning "Unable to detect NVIDIA GPU. Install lspci or lshw to automatically detect and install NVIDIA CUDA drivers."
+    exit 0
 fi
 
 check_gpu() {
     case $1 in
-        lspci) command -v lspci >/dev/null && lspci -d '10de:' | grep -q 'NVIDIA' || return 1 ;;
-        lshw) command -v lshw >/dev/null && lshw -c display -numeric | grep -q 'vendor: .* \[10DE\]' || return 1 ;;
-        nvidia-smi) command -v nvidia-smi >/dev/null || return 1 ;;
+        lspci) available lspci && lspci -d '10de:' | grep -q 'NVIDIA' || return 1 ;;
+        lshw) available lshw && $SUDO lshw -c display -numeric | grep -q 'vendor: .* \[10DE\]' || return 1 ;;
+        nvidia-smi) available nvidia-smi || return 1 ;;
     esac
 }
+
+if check_gpu nvidia-smi; then
+    status "NVIDIA GPU installed."
+    exit 0
+fi
 
 if ! check_gpu lspci && ! check_gpu lshw; then
     warning "No NVIDIA GPU detected. Ollama will run in CPU-only mode."
@@ -117,7 +139,7 @@ install_cuda_driver_yum() {
             $SUDO $PACKAGE_MANAGER-config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/$1$2/$(uname -m)/cuda-$1$2.repo
             ;;
         dnf)
-            $SUDO dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/$1$2/$(uname -m)/cuda-$1$2.repo
+            $SUDO $PACKAGE_MANAGER config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/$1$2/$(uname -m)/cuda-$1$2.repo
             ;;
     esac
 
@@ -130,7 +152,6 @@ install_cuda_driver_yum() {
     esac
 
     status 'Installing CUDA driver...'
-    $SUDO $PACKAGE_MANAGER -y update
 
     if [ "$1" = 'centos' ] || [ "$1$2" = 'rhel7' ]; then
         $SUDO $PACKAGE_MANAGER -y install nvidia-driver-latest-dkms
@@ -155,7 +176,9 @@ install_cuda_driver_apt() {
     status 'Installing CUDA driver...'
     $SUDO dpkg -i $TEMP_DIR/cuda-keyring.deb
     $SUDO apt-get update
-    DEBIAN_FRONTEND=noninteractive $SUDO apt-get -y install cuda-drivers -q
+
+    [ -n "$SUDO" ] && SUDO_E="$SUDO -E" || SUDO_E=
+    DEBIAN_FRONTEND=noninteractive $SUDO_E apt-get -y install cuda-drivers -q
 }
 
 if [ ! -f "/etc/os-release" ]; then
@@ -169,7 +192,7 @@ OS_VERSION=$VERSION_ID
 
 PACKAGE_MANAGER=
 for PACKAGE_MANAGER in dnf yum apt-get; do
-    if command -v $PACKAGE_MANAGER >/dev/null; then
+    if available $PACKAGE_MANAGER; then
         break
     fi
 done
@@ -182,18 +205,34 @@ if ! check_gpu nvidia-smi || [ -z "$(nvidia-smi | grep -o "CUDA Version: [0-9]*\
     case $OS_NAME in
         centos|rhel) install_cuda_driver_yum 'rhel' $OS_VERSION ;;
         rocky) install_cuda_driver_yum 'rhel' $(echo $OS_VERSION | cut -c1) ;;
-        fedora) install_cuda_driver_dnf $OS_NAME $OS_VERSION ;;
-        debian|ubuntu) install_cuda_driver_apt $OS_NAME $OS_VERSION ;;
+        fedora) install_cuda_driver_yum $OS_NAME $OS_VERSION ;;
+        amzn) install_cuda_driver_yum 'fedora' '35' ;;
+        debian) install_cuda_driver_apt $OS_NAME $OS_VERSION ;;
+        ubuntu) install_cuda_driver_apt $OS_NAME $(echo $OS_VERSION | sed 's/\.//') ;;
+        *) exit ;;
     esac
 fi
 
 if ! lsmod | grep -q nvidia; then
     KERNEL_RELEASE="$(uname -r)"
     case $OS_NAME in
-        centos|rhel|rocky|fedora) $SUDO $PACKAGE_MANAGER -y install kernel-devel-$KERNEL_RELEASE kernel-headers-$KERNEL_RELEASE ;;
+        centos|rhel|rocky|fedora|amzn) $SUDO $PACKAGE_MANAGER -y install kernel-devel-$KERNEL_RELEASE kernel-headers-$KERNEL_RELEASE ;;
         debian|ubuntu) $SUDO apt-get -y install linux-headers-$KERNEL_RELEASE ;;
+        *) exit ;;
     esac
 
-    $SUDO dkms status | awk -F: '/added/ { print $1 }' | xargs -n1 $SUDO dkms install
+    NVIDIA_CUDA_VERSION=$($SUDO dkms status | awk -F: '/added/ { print $1 }')
+    if [ -n "$NVIDIA_CUDA_VERSION" ]; then
+        $SUDO dkms install $NVIDIA_CUDA_VERSION
+    fi
+
+    if lsmod | grep -q nouveau; then
+        status 'Reboot to complete NVIDIA CUDA driver install.'
+        exit 0
+    fi
+
     $SUDO modprobe nvidia
 fi
+
+
+status "NVIDIA CUDA drivers installed."
